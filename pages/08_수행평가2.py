@@ -1,95 +1,61 @@
 import streamlit as st
 import pandas as pd
-import statistics
 
-st.set_page_config(page_title="지역별 미세먼지 체크", page_icon="🌪️", layout="centered")
+# CSV는 루트 폴더에 있다고 가정
+DATA_PATH = "air.csv"
 
-# ------------------------------
-# 1) CSV 불러오기 (루트 폴더)
-# ------------------------------
 @st.cache_data
 def load_data():
-    df = pd.read_csv("pm25_data.csv")
-    return df
+    return pd.read_csv(DATA_PATH, encoding="cp949")
 
 df = load_data()
 
-st.title("🏙️ 지역별 미세먼지 체크")
-st.markdown(
-    """
-    반가워요! 😊  
-    아래에서 **사는 지역을 선택하면**,  
+st.title("🌫️ 지역·시간별 미세먼지 확인 & 복장 추천")
 
-    - 최근 PM2.5 측정값  
-    - 평균 수치  
-    - 등급  
-    - 권장 복장 👕🧥  
-    - 외출 시 주의사항 😷  
+# -----------------------------
+#  지역 선택 기능
+# -----------------------------
+regions = df["구분"].unique()
+selected_region = st.selectbox("📍 지역을 선택하세요", regions)
 
-    을 바로 알려드릴게요!
-    """
-)
+# -----------------------------
+#  시간 선택 기능
+# -----------------------------
+times = df["일시"].unique()
+selected_time = st.selectbox("⏰ 시간을 선택하세요", times)
 
-# ------------------------------
-# 2) 지역 목록 생성
-# ------------------------------
-regions = sorted(df["region"].unique())
-region_selected = st.selectbox("👀 확인하고 싶은 지역을 골라주세요!", regions)
+# -----------------------------
+#  데이터 필터링
+# -----------------------------
+filtered = df[
+    (df["구분"] == selected_region) &
+    (df["일시"] == selected_time)
+]
 
-# ------------------------------
-# 3) 해당 지역 데이터 계산
-# ------------------------------
-region_data = df[df["region"] == region_selected]["pm25"].tolist()
-avg_pm25 = round(statistics.mean(region_data), 1)
-latest_pm25 = region_data[-1]
+if filtered.empty:
+    st.warning("해당 시간대의 데이터가 없어요!")
+else:
+    pm10 = float(filtered["미세먼지(PM10)"].values[0])
+    pm25 = float(filtered["초미세먼지(PM25)"].values[0])
 
-# ------------------------------
-# 4) 등급 및 복장 추천
-# ------------------------------
-def get_grade_and_advice(pm):
-    if pm <= 15:
-        return (
-            "좋음 😊",
-            "가벼운 활동하기 딱 좋은 날씨예요!",
-            "티셔츠나 가벼운 후드티 정도면 충분해요 👕"
-        )
-    elif pm <= 35:
-        return (
-            "보통 🙂",
-            "민감한 분들은 조금 조심하면 좋아요!",
-            "얇은 겉옷 정도 챙기면 좋아요 🧥"
-        )
-    elif pm <= 75:
-        return (
-            "나쁨 ⚠️",
-            "오래 밖에 있는 건 피하는 게 좋아요!",
-            "마스크 착용 + 두꺼운 겉옷 추천 😷🧥"
-        )
-    else:
-        return (
-            "매우 나쁨 🚫",
-            "가급적 실내에 머무르는 걸 추천드려요!",
-            "외출 시 꼭 KF94 마스크 + 따뜻한 복장! 🧤😷"
-        )
+    st.subheader("📊 선택한 조건의 미세먼지 수치")
+    st.write(f"• **PM10(미세먼지):** {pm10}")
+    st.write(f"• **PM2.5(초미세먼지):** {pm25}")
 
-grade, advice, outfit = get_grade_and_advice(avg_pm25)
+    # -----------------------------
+    #  복장 추천 로직
+    # -----------------------------
+    def get_outfit(pm10, pm25):
+        if pm25 <= 15 and pm10 <= 30:
+            return "🟢 공기 좋아요! 평상시 편한 복장 OK 🙆‍♀️"
+        elif pm25 <= 35 or pm10 <= 80:
+            return "🟡 공기 보통! 가벼운 마스크 추천 😷"
+        elif pm25 <= 75 or pm10 <= 150:
+            return "🟠 공기 나쁨! KF80 마스크 착용 필수 🚨"
+        else:
+            return "🔴 매우 나쁨! 외출 자제 + KF94 마스크 필수 ❗"
 
-# ------------------------------
-# 5) 출력 UI
-# ------------------------------
-st.subheader(f"🌆 선택 지역: **{region_selected}**")
-st.write(f"📌 최근 측정값: **{latest_pm25} μg/m³**")
-st.write(f"📌 평균 PM2.5: **{avg_pm25} μg/m³** — 등급: **{grade}**")
+    outfit = get_outfit(pm10, pm25)
 
-st.markdown("### 😊 한눈에 정리해드릴게요")
-st.info(advice)
-
-st.markdown("### 👕 오늘의 권장 복장")
-st.success(outfit)
-
-# 원본 데이터 보기
-st.markdown("---")
-if st.checkbox("📄 이 지역의 원본 데이터 보기"):
-    st.dataframe(df[df["region"] == region_selected])
-
-st.caption("데이터는 pm25_data.csv에 기반해 계산됩니다.")
+    st.subheader("👕 오늘의 복장 추천")
+    st.success(outfit)
